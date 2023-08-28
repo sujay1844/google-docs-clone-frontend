@@ -13,13 +13,13 @@ export function getOperation(oldStr: string, newStr: string) {
 			change = {
 				op: 'del',
 				pos: position,
-				char: content
+				char: content,
 			}
 		} else if(operation === 1) {
 			change = {
 				op: 'ins',
 				pos: position,
-				char: content
+				char: content,
 			}
 		} else {
 			position += content.length
