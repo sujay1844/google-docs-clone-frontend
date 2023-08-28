@@ -26,6 +26,7 @@ export function getOperation(oldStr: string, newStr: string) {
 		}
 
 	}
+	change = {...change, timestamp: Date.now()}
 	return change
 }
 

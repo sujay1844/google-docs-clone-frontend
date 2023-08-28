@@ -4,7 +4,7 @@ const client_id = Math.ceil(Math.random()*100)
 
 import { ChangeEvent, useState } from "react"
 import { getOperation, applyOperation } from "../lib/diff"
-import { transform } from "@/lib/transformer"
+import { transform } from "../lib/transformer"
 
 const websocket = new WebSocket(`ws://${URL}/${client_id}/ws`)
 
@@ -13,33 +13,41 @@ websocket.onclose = () => console.log("disconnected")
 websocket.onerror = (error) => console.error(error)
 
 export default function Home() {
-  const [last_synced_revision, setLastSyncedRevision] = useState(0) as [number, Function]
-  const [pending_changes, setPendingChanges] = useState([]) as [object[], Function]
-  const [currently_processing_change, setCurrentlyProcessingChange] = useState(null) as [object | null, Function]
+  const [lastSyncedRevision, setLastSyncedRevision] = useState(0) as [number, Function]
+  const [pendingChanges, setPendingChanges] = useState([]) as [object[], Function]
+  const [currentlyProcessingChange, setCurrentlyProcessingChange] = useState(null) as [object | null, Function]
   const [doc, setDoc] = useState("")
 
   websocket.onmessage = async (message) => {
     const data = JSON.parse(message.data)
     console.log("change received", data)
 
-    if (JSON.stringify(data.change) === JSON.stringify(currently_processing_change)) { 
+    setLastSyncedRevision(data.revision)
+
+    if (JSON.stringify(data.change) === JSON.stringify(currentlyProcessingChange)) { 
+      // Current change was processed
       setCurrentlyProcessingChange(null)
-      setPendingChanges(pending_changes.filter((change) => JSON.stringify(change) !== JSON.stringify(data.change)))
+
+      // Remove current change from pending changes
+      setPendingChanges(pendingChanges.filter((change) => JSON.stringify(change) !== JSON.stringify(data.change)))
+      
       await sendNextChange(websocket)
       return
     }
-    setPendingChanges(pending_changes.map((change) => transform(change, data.change)))
+    // Transform all pending changes with the current change
+    setPendingChanges(pendingChanges.map((change) => transform(change, data.change)))
+
+    // Apply the change to the document
     const newDoc = applyOperation(doc, data.change)
     setDoc(newDoc)
-    setLastSyncedRevision(data.revision)
   }
 
   async function sendNextChange(websocket: WebSocket) {
     // if there is a change currently being processed, do nothing
-    if (currently_processing_change !== null) return
+    if (currentlyProcessingChange !== null) return
 
     // next change to be processed
-    const change = pending_changes.pop()
+    const change = pendingChanges.pop()
 
     // all changes have been processed
     if (change === undefined) {
@@ -49,7 +57,7 @@ export default function Home() {
 
     websocket.send(JSON.stringify({
       change: change,
-      revision: last_synced_revision + 1
+      revision: lastSyncedRevision + 1
     }))
     setCurrentlyProcessingChange(change)
   }
@@ -59,18 +67,21 @@ export default function Home() {
     const newDoc = target.value
     const operation = getOperation(doc, newDoc)
 
-
+    // Apply the change to the document
     setDoc(newDoc)
-    setPendingChanges([...pending_changes, operation])
-    if(currently_processing_change === null) 
+    // Add the change to the pending changes
+    setPendingChanges([...pendingChanges, operation])
+
+    // For the first change, send it immediately
+    if(currentlyProcessingChange === null) 
       await sendNextChange(websocket)
   }
 
   return (
     <div>
-      <h1>Last synced revision: {last_synced_revision}</h1>
+      <h1>Last synced revision: {lastSyncedRevision}</h1>
       <textarea value={doc} onChange={handleInput}></textarea>
-      <button onClick={() => console.log(pending_changes, currently_processing_change)}>Click me</button>
+      <button onClick={() => console.log(pendingChanges, currentlyProcessingChange)}>Click me</button>
     </div>
   )
 
