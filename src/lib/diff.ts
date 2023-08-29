@@ -1,3 +1,4 @@
+import { Operation } from '@/lib/types'
 import { diff_match_patch } from 'diff-match-patch'
 
 const dmp = new diff_match_patch()
@@ -5,7 +6,10 @@ const dmp = new diff_match_patch()
 export function getOperation(oldStr: string, newStr: string) {
 	const diffs = dmp.diff_main(oldStr, newStr)
 	dmp.diff_cleanupSemantic(diffs)
-	let change = {};
+	let change: Operation = {
+		op: 'noop',
+		pos: 0,
+	};
 
 	let position = 0
 	for (const [operation, content] of diffs) {
@@ -26,11 +30,10 @@ export function getOperation(oldStr: string, newStr: string) {
 		}
 
 	}
-	change = {...change, timestamp: Date.now()}
 	return change
 }
 
-export function applyOperation(doc: string, operation: any) {
+export function applyOperation(doc: string, operation: Operation) {
 	if(operation.op === 'del') {
 		return doc.slice(0, operation.pos) + doc.slice(operation.pos + 1)
 	} else if(operation.op === 'ins') {
