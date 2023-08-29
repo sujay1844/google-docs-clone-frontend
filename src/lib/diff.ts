@@ -17,13 +17,13 @@ export function getOperation(oldStr: string, newStr: string) {
 			change = {
 				op: 'del',
 				pos: position,
-				char: content,
+				str: content,
 			}
 		} else if(operation === 1) {
 			change = {
 				op: 'ins',
 				pos: position,
-				char: content,
+				str: content,
 			}
 		} else {
 			position += content.length
@@ -35,9 +35,9 @@ export function getOperation(oldStr: string, newStr: string) {
 
 export function applyOperation(doc: string, operation: Operation) {
 	if(operation.op === 'del') {
-		return doc.slice(0, operation.pos) + doc.slice(operation.pos + 1)
+		return doc.slice(0, operation.pos) + doc.slice(operation.pos + operation.str!.length)
 	} else if(operation.op === 'ins') {
-		return doc.slice(0, operation.pos) + operation.char + doc.slice(operation.pos)
+		return doc.slice(0, operation.pos) + operation.str + doc.slice(operation.pos)
 	}
 	return doc
 }

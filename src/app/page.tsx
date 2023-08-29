@@ -3,6 +3,8 @@ const URL = "localhost:8000"
 const client_id = Math.ceil(Math.random()*100)
 
 import { ChangeEvent, useEffect, useState } from "react"
+import { isEqual, omit } from "lodash"
+
 import { getOperation, applyOperation } from "@/lib/diff"
 import { transform } from "@/lib/transformer"
 import { Operation } from "@/lib/types"
@@ -38,17 +40,18 @@ export default function Home() {
 
   websocket.onmessage = async (message) => {
     const data = JSON.parse(message.data)
-    console.log("change received", data)
-    const incomingChange = data.change as Operation
+    const incomingChange = data as Operation
+    console.log("change was received", omit(incomingChange, 'revision'))
 
-    setLastSyncedRevision(data.revision as number)
+    setLastSyncedRevision(incomingChange.revision)
 
-    if (JSON.stringify(incomingChange) === JSON.stringify(currentlyProcessingChange)) { 
+    if (isEqual(omit(incomingChange, 'revision'), omit(currentlyProcessingChange, 'revision'))) { 
+      console.log("change was processed", omit(incomingChange, 'revision'))
       // Current change was processed
       setCurrentlyProcessingChange(null)
 
       // Remove current change from pending changes
-      setPendingChanges(pendingChanges.filter((change) => JSON.stringify(change) !== JSON.stringify(incomingChange)))
+      setPendingChanges(pendingChanges.filter((change) => !isEqual(change, incomingChange)))
       
       sendNextChange(websocket)
       return
@@ -74,10 +77,8 @@ export default function Home() {
     }
     setCurrentlyProcessingChange(change)
 
-    websocket.send(JSON.stringify({
-      change: change,
-      revision: lastSyncedRevision + 1
-    }))
+    change.revision = lastSyncedRevision
+    websocket.send(JSON.stringify(change))
 
   }
 
@@ -85,6 +86,7 @@ export default function Home() {
     const target = changeEvent.target as HTMLTextAreaElement
     const newDoc = target.value
     const operation = getOperation(doc, newDoc)
+    console.log("change was made", operation)
 
     // Apply the change to the document
     setDoc(newDoc)
