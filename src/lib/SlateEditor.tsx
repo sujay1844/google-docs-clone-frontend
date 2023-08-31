@@ -1,5 +1,5 @@
 "use client"
-import React, { FC, useState } from 'react'
+import React, { useState } from 'react'
 import { Transforms, createEditor } from 'slate'
 import { Slate, Editable, withReact } from 'slate-react'
 
@@ -26,16 +26,16 @@ const initialValue: Descendant[] = [
     children: [{ text: 'A line of text in a paragraph.' }],
   },
 ]
-export function getText(editor: BaseEditor & ReactEditor) {
+export function getText(editor: BaseEditor&ReactEditor) {
   return (editor.children[0] as any).children[0].text
 }
 
-export function applyOperation(editor: BaseEditor & ReactEditor, operation: Operation) {
-  if (operation.op === "ins") {
+export function applyOperation(editor: BaseEditor&ReactEditor, operation: Operation) {
+  if(operation.op === "ins") {
     Transforms.insertText(editor, operation.str!, {
       at: { path: [0, 0], offset: operation.pos },
     })
-  } else if (operation.op === "del") {
+  } else if(operation.op === "del") {
     Transforms.delete(editor, {
       at: { path: [0, 0], offset: operation.pos },
       distance: operation.str!.length,
@@ -43,21 +43,13 @@ export function applyOperation(editor: BaseEditor & ReactEditor, operation: Oper
   }
 }
 
-interface Props {
-  editor: BaseEditor & ReactEditor
-}
-
-const App:FC<Props> = ({editor}) => {
+export default function SlateEditor(editor: BaseEditor&ReactEditor) {
   // const [editor] = useState(() => withReact(createEditor()))
-  // const [editor] = useState(props.editor)
-
 
   // Render the Slate context.
   return <div>
-   <Slate editor={editor} initialValue={[]}>
+   <Slate editor={editor} initialValue={initialValue}>
       <Editable />
    </Slate>
   </div>
 }
-
-export default App

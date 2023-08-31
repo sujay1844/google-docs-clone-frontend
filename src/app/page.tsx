@@ -2,8 +2,8 @@
 const URL = "localhost:8000"
 const client_id = Math.ceil(Math.random()*100)
 
-import { ChangeEvent, useEffect, useState } from "react"
-import { isEqual, omit } from "lodash"
+import { ChangeEvent, useEffect, useState, useRef } from "react"
+import { get, isEqual, omit } from "lodash"
 
 import { getOperation, applyOperation } from "@/lib/diff"
 import { transform } from "@/lib/transformer"
@@ -15,12 +15,86 @@ websocket.onopen = () => console.log("connected")
 websocket.onclose = () => console.log("disconnected")
 websocket.onerror = (error) => console.error(error)
 
+import { Transforms, createEditor } from 'slate'
+import { Slate, Editable, withReact } from 'slate-react'
+
+
+// Typsescript specific code
+import { BaseEditor, Descendant } from 'slate'
+import { ReactEditor } from 'slate-react'
+
+type CustomElement = { type: 'paragraph'; children: CustomText[] }
+type CustomText = { text: string }
+
+declare module 'slate' {
+  interface CustomTypes {
+    Editor: BaseEditor & ReactEditor
+    Element: CustomElement
+    Text: CustomText
+  }
+}
+const initialValue: Descendant[] = [
+  {
+    type: 'paragraph',
+    children: [{ text: 'hi' }],
+  },
+]
+
 export default function Home() {
   const [lastSyncedRevision, setLastSyncedRevision] = useState(0) as [number, Function]
   const [pendingChanges, setPendingChanges] = useState([]) as [Operation[], Function]
   const [currentlyProcessingChange, setCurrentlyProcessingChange] = useState(null) as [Operation | null, Function]
   const [doc, setDoc] = useState("")
   const [isMounted, setIsMounted] = useState(false);
+  const editor = withReact(createEditor())
+
+  function getText(editor: BaseEditor & ReactEditor) {
+    return (editor.children[0] as any).children[0].text
+  }
+
+  function applyOperation(editor: BaseEditor & ReactEditor, operation: Operation) {
+    if (operation.op === "ins") {
+      Transforms.insertText(editor, operation.str!, {
+        at: { path: [0, 0], offset: operation.pos },
+      })
+    } else if (operation.op === "del") {
+      Transforms.delete(editor, {
+        at: { path: [0, 0], offset: operation.pos },
+        distance: operation.str!.length,
+      })
+    }
+    return getText(editor)
+  }
+
+  async function sendNextChange(websocket: WebSocket) {
+    // if there is a change currently being processed, do nothing
+    if (currentlyProcessingChange !== null) return
+
+    // next change to be processed
+    const change = pendingChanges.shift()
+
+    // all changes have been processed
+    if (change === undefined) {
+      return
+    }
+    setCurrentlyProcessingChange(change)
+
+    change.revision = lastSyncedRevision
+    websocket.send(JSON.stringify(change))
+
+  }
+
+  async function handleInput(currentDoc: Descendant[]) {
+    // const target = changeEvent.target as HTMLTextAreaElement
+    const newDoc = getText(editor)
+    const operation = getOperation(doc, newDoc)
+    console.log("change was made", operation)
+
+    // Apply the change to the document
+    setDoc(newDoc)
+    // Add the change to the pending changes
+    await setPendingChanges((prevPendingChanges: Operation[]) => [...prevPendingChanges, operation])
+  }
 
   // When a change is added to the pending changes, send it to the server
   useEffect(() => {
@@ -60,38 +134,8 @@ export default function Home() {
     setPendingChanges(pendingChanges.map((change) => transform(change, incomingChange)))
 
     // Apply the change to the document
-    const newDoc = applyOperation(doc, incomingChange)
+    const newDoc = applyOperation(editor, incomingChange)
     setDoc(newDoc)
-  }
-
-  async function sendNextChange(websocket: WebSocket) {
-    // if there is a change currently being processed, do nothing
-    if (currentlyProcessingChange !== null) return
-
-    // next change to be processed
-    const change = pendingChanges.shift()
-
-    // all changes have been processed
-    if (change === undefined) {
-      return
-    }
-    setCurrentlyProcessingChange(change)
-
-    change.revision = lastSyncedRevision
-    websocket.send(JSON.stringify(change))
-
-  }
-
-  async function handleInput(changeEvent: ChangeEvent) {
-    const target = changeEvent.target as HTMLTextAreaElement
-    const newDoc = target.value
-    const operation = getOperation(doc, newDoc)
-    console.log("change was made", operation)
-
-    // Apply the change to the document
-    setDoc(newDoc)
-    // Add the change to the pending changes
-    await setPendingChanges((prevPendingChanges: Operation[]) => [...prevPendingChanges, operation])
   }
 
   if (!isMounted) return null
@@ -100,8 +144,10 @@ export default function Home() {
     <div>
       <h1>Client ID: {client_id}</h1>
       <h1>Last synced revision: {lastSyncedRevision}</h1>
-      <textarea value={doc} onChange={handleInput}></textarea>
       <button onClick={() => console.log(pendingChanges, currentlyProcessingChange)}>Click me</button>
+      <Slate editor={editor} initialValue={initialValue} onChange={handleInput}>
+          <Editable />
+      </Slate>
     </div>
   )
 
