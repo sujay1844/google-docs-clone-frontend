@@ -2,12 +2,14 @@
 const URL = "localhost:8000"
 const client_id = Math.ceil(Math.random()*100)
 
-import { ChangeEvent, useEffect, useState, useRef } from "react"
-import { get, isEqual, omit } from "lodash"
+import { ChangeEvent, useEffect, useState } from "react"
+import { isEqual, omit, set } from "lodash"
 
-import { getOperation, applyOperation } from "@/lib/diff"
+import { getOperation } from "@/lib/diff"
+import { applyOperation } from "@/lib/diff"
 import { transform } from "@/lib/transformer"
 import { Operation } from "@/lib/types"
+import TextArea from "@/lib/TextArea"
 
 const websocket = new WebSocket(`ws://${URL}/ws/${client_id}`)
 
@@ -15,58 +17,19 @@ websocket.onopen = () => console.log("connected")
 websocket.onclose = () => console.log("disconnected")
 websocket.onerror = (error) => console.error(error)
 
-import { Transforms, createEditor } from 'slate'
-import { Slate, Editable, withReact } from 'slate-react'
-
-
-// Typsescript specific code
-import { BaseEditor, Descendant } from 'slate'
-import { ReactEditor } from 'slate-react'
-
-type CustomElement = { type: 'paragraph'; children: CustomText[] }
-type CustomText = { text: string }
-
-declare module 'slate' {
-  interface CustomTypes {
-    Editor: BaseEditor & ReactEditor
-    Element: CustomElement
-    Text: CustomText
-  }
-}
-const initialValue: Descendant[] = [
-  {
-    type: 'paragraph',
-    children: [{ text: 'hi' }],
-  },
-]
-
 export default function Home() {
-  const [lastSyncedRevision, setLastSyncedRevision] = useState(0) as [number, Function]
-  const [pendingChanges, setPendingChanges] = useState([]) as [Operation[], Function]
-  const [currentlyProcessingChange, setCurrentlyProcessingChange] = useState(null) as [Operation | null, Function]
+  const [lastSyncedRevision, setLastSyncedRevision] = useState(0)
+  const [pendingChanges, setPendingChanges] = useState<Operation[]>([])
+  const [receivedChanges, setReceivedChanges] = useState<Operation[]>([])
+  const [currentlyProcessingChange, setCurrentlyProcessingChange] = useState<Operation | null>(null)
+  const [cursorPosition, setCursorPosition] = useState<number>(0)
   const [doc, setDoc] = useState("")
-  const [isMounted, setIsMounted] = useState(false);
-  const editor = withReact(createEditor())
 
-  function getText(editor: BaseEditor & ReactEditor) {
-    return (editor.children[0] as any).children[0].text
-  }
+  const handleCursorPositionChange = (newPosition: number) => {
+    setCursorPosition(newPosition);
+  };
 
-  function applyOperation(editor: BaseEditor & ReactEditor, operation: Operation) {
-    if (operation.op === "ins") {
-      Transforms.insertText(editor, operation.str!, {
-        at: { path: [0, 0], offset: operation.pos },
-      })
-    } else if (operation.op === "del") {
-      Transforms.delete(editor, {
-        at: { path: [0, 0], offset: operation.pos },
-        distance: operation.str!.length,
-      })
-    }
-    return getText(editor)
-  }
-
-  async function sendNextChange(websocket: WebSocket) {
+  const sendNextChange = async (websocket: WebSocket) => {
     // if there is a change currently being processed, do nothing
     if (currentlyProcessingChange !== null) return
 
@@ -80,20 +43,39 @@ export default function Home() {
     setCurrentlyProcessingChange(change)
 
     change.revision = lastSyncedRevision
+    console.log("sending change", omit(change, 'revision'))
     websocket.send(JSON.stringify(change))
 
   }
 
-  async function handleInput(currentDoc: Descendant[]) {
-    // const target = changeEvent.target as HTMLTextAreaElement
-    const newDoc = getText(editor)
+  const handleChange = (changeEvent: ChangeEvent) => {
+    const target = changeEvent.target as HTMLTextAreaElement
+    // const newDoc = (currentDoc[0] as any).children[0].text
+    const newDoc = target.value
     const operation = getOperation(doc, newDoc)
-    console.log("change was made", operation)
+    if (operation === null) return
+    if (operation.op === "noop") return
 
+    // check if change is same as the current change
+    if (isEqual(
+      omit(operation, 'revision'),
+      omit(currentlyProcessingChange, 'revision'))
+    ) return
+
+    // check if change is in received changes
+    for (const change of receivedChanges) {
+      if (isEqual(
+        omit(operation, 'revision'),
+        omit(change, 'revision'))
+      ) return
+    }
+
+    console.log("change was made", omit(operation, 'revision'))
     // Apply the change to the document
     setDoc(newDoc)
     // Add the change to the pending changes
-    await setPendingChanges((prevPendingChanges: Operation[]) => [...prevPendingChanges, operation])
+    setPendingChanges((prevPendingChanges: Operation[]) =>
+      [...prevPendingChanges, operation])
   }
 
   // When a change is added to the pending changes, send it to the server
@@ -108,46 +90,71 @@ export default function Home() {
     sendNextChange(websocket)
   }, [currentlyProcessingChange])
 
+  // When receivedchanges exceeds 3, remove the first change
   useEffect(() => {
-    setIsMounted(true);
-  }, []);
+    if(receivedChanges.length <= 3) return
+    setReceivedChanges(prev => prev.slice(1))
+  }, [receivedChanges])
 
-  websocket.onmessage = async (message) => {
+  websocket.onmessage = (message) => {
     const data = JSON.parse(message.data)
-    const incomingChange = data as Operation
-    console.log("change was received", omit(incomingChange, 'revision'))
+    const incomingChange: Operation = data.change
 
-    setLastSyncedRevision(incomingChange.revision)
-
-    if (isEqual(omit(incomingChange, 'revision'), omit(currentlyProcessingChange, 'revision'))) { 
-      console.log("change was processed", omit(incomingChange, 'revision'))
+    if(data.ack) {
+      console.log("ack received", data.change)
       // Current change was processed
       setCurrentlyProcessingChange(null)
 
       // Remove current change from pending changes
-      setPendingChanges(pendingChanges.filter((change) => !isEqual(change, incomingChange)))
+      setPendingChanges((prevPendingChanges: Operation[]) =>
+        prevPendingChanges.filter(
+          (change) => !isEqual(change, incomingChange)
+        )
+      )
       
       sendNextChange(websocket)
       return
     }
+    console.log("change was received", omit(incomingChange, 'revision'))
+
+    setLastSyncedRevision(incomingChange.revision ?? 0)
+
     // Transform all pending changes with the current change
-    setPendingChanges(pendingChanges.map((change) => transform(change, incomingChange)))
+    setPendingChanges((prevPendingChanges: Operation[]) =>
+      prevPendingChanges.map(
+        (change) => transform(change, incomingChange)
+      )
+    )
 
     // Apply the change to the document
-    const newDoc = applyOperation(editor, incomingChange)
+    const newDoc = applyOperation(doc, incomingChange)
+    const currentCursorPosition = cursorPosition
     setDoc(newDoc)
+    setCursorPosition(currentCursorPosition)
+
+    // Add the change to the received changes
+    setReceivedChanges((prevReceivedChanges: Operation[]) =>
+      [...prevReceivedChanges, incomingChange])
   }
 
-  if (!isMounted) return null
+  const [isMounted, setIsMounted] = useState(false)
+  useEffect(() => {
+    setIsMounted(true)
+  }, [])
+
+  if(!isMounted) return null
 
   return (
     <div>
       <h1>Client ID: {client_id}</h1>
       <h1>Last synced revision: {lastSyncedRevision}</h1>
-      <button onClick={() => console.log(pendingChanges, currentlyProcessingChange)}>Click me</button>
-      <Slate editor={editor} initialValue={initialValue} onChange={handleInput}>
-          <Editable />
-      </Slate>
+      <h1>Cursor position: {cursorPosition}</h1>
+      <TextArea
+        cursorPosition={cursorPosition}
+        onCursorPositionChange={handleCursorPositionChange}
+        onChange={handleChange}
+        value={doc}
+      />
     </div>
   )
 
