@@ -1,0 +1,15 @@
+.ql-toolbar {
+  @apply bg-gray-200 rounded-t-lg;
+}
+
+.ql-toolbar span.ql-formats {
+  @apply flex flex-row gap-2 items-center;
+}
+
+.ql-toolbar button.ql-active {
+  @apply bg-gray-300 text-gray-700 rounded-md;
+}
+
+.ql-container {
+  @apply bg-white rounded-b-lg;
+}
