@@ -1,33 +1,28 @@
 {
   "name": "google-docs-clone-frontend",
-  "version": "0.1.0",
+  "version": "0.0.0",
   "private": true,
+  "type": "module",
   "scripts": {
-    "dev": "next dev",
-    "build": "next build",
-    "start": "next start",
-    "lint": "next lint"
-  },
-  "dependencies": {
-    "@types/node": "20.5.6",
-    "@types/react": "18.2.21",
-    "@types/react-dom": "18.2.7",
-    "autoprefixer": "10.4.15",
-    "diff-match-patch": "^1.0.5",
-    "eslint": "8.48.0",
-    "eslint-config-next": "13.4.19",
-    "lodash": "^4.17.21",
-    "next": "13.4.19",
-    "postcss": "8.4.28",
-    "react": "18.2.0",
-    "react-dom": "18.2.0",
-    "slate": "^0.94.1",
-    "slate-react": "^0.98.3",
-    "tailwindcss": "3.3.3",
-    "typescript": "5.2.2"
+    "typecheck": "tsc --noEmit",
+    "dev": "vite --port=3001",
+    "build": "vite build",
+    "serve": "vite preview",
+    "start": "vite"
   },
   "devDependencies": {
-    "@types/diff-match-patch": "^1.0.32",
-    "@types/lodash": "^4.14.197"
-  }
+    "@tanstack/router-plugin": "^1.84.4",
+    "@types/react": "^18.3.3",
+    "@types/react-dom": "^18.3.0",
+    "@vitejs/plugin-react": "^4.3.2",
+    "vite": "^5.4.8"
+  },
+  "dependencies": {
+    "@tanstack/react-router": "^1.85.0",
+    "@tanstack/router-devtools": "^1.85.0",
+    "quill": "^2.0.3",
+    "react": "^18.3.1",
+    "react-dom": "^18.3.1"
+  },
+  "packageManager": "pnpm@9.4.0+sha512.f549b8a52c9d2b8536762f99c0722205efc5af913e77835dbccc3b0b0b2ca9e7dc8022b78062c17291c48e88749c70ce88eb5a74f1fa8c4bf5e18bb46c8bd83a"
 }
